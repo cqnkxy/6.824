@@ -17,12 +17,32 @@ func (mr *Master) schedule(phase jobPhase) {
 
 	fmt.Printf("Schedule: %v %v tasks (%d I/Os)\n", ntasks, phase, nios)
 
-	// All ntasks tasks have to be scheduled on workers, and only once all of
-	// them have been completed successfully should the function return.
-	// Remember that workers may fail, and that any given worker may finish
-	// multiple tasks.
-	//
-	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-	//
+	cFinish := make(chan bool)
+
+	for i := 0; i < ntasks; i++ {
+		go func(i int) {
+			args := &DoTaskArgs {
+				JobName:       mr.jobName,
+				File:          mr.files[i],
+				Phase:         phase,
+				TaskNumber:    i,
+				NumOtherPhase: nios }
+			for {
+				worker := <- mr.registerChannel
+				ok := call(worker, "Worker.DoTask", args, new(struct{}))
+				if ok {
+					cFinish <- true  // this must run before the next command, 
+					                 // otherwise the last several tasks get stuck
+					mr.registerChannel <- worker
+					break
+				}
+			}
+		}(i)
+	}
+
+	for i := 0; i < ntasks; i++ {
+		<- cFinish
+	}
+
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }
